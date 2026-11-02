@@ -4,11 +4,13 @@ name: Build PROXY MOD
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Baixar projeto
         uses: actions/checkout@v4
@@ -20,22 +22,36 @@ jobs:
           java-version: '17'
 
       - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
-      - name: Instalar SDK 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Extrair ZIP
+        run: |
+          mkdir extracted
+          unzip -q PROXY_MOD_projeto_android.zip -d extracted
 
-      - name: Extrair projeto
-        run: unzip -q PROXY_MOD_projeto_android.zip -d extracted
+      - name: Localizar projeto Android
+        run: |
+          WRAPPER=$(find extracted -type f -name gradlew | head -n 1)
+
+          if [ -z "$WRAPPER" ]; then
+            echo "ERRO: arquivo gradlew não encontrado no ZIP."
+            echo "O projeto precisa conter o Gradle Wrapper."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$WRAPPER")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          chmod +x "$WRAPPER"
 
       - name: Compilar APK
         run: |
-          cd extracted/ProxyModProject
-          gradle :app:assembleDebug
+          cd "$PROJECT_DIR"
+          ./gradlew --no-daemon :app:assembleDebug
 
-      - name: Disponibilizar APK
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: PROXY-MOD-APK
-          path: extracted/ProxyModProject/app/build/outputs/apk/debug/*.apk
+          path: extracted/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
           
